@@ -71,8 +71,6 @@ tags:
     description: Повторяющиеся платежи
   - name: Admin
     description: Администрирование
-  - name: Audit
-    description: Журнал аудита
 
 components:
   securitySchemes:
@@ -84,7 +82,6 @@ components:
 
   schemas:
     # АУТЕНТИФИКАЦИЯ
-
     LoginRequest:
       type: object
       required:
@@ -163,7 +160,6 @@ components:
           example: ["initiator", "treasurer"]
 
     # СЧЕТА
-
     Account:
       type: object
       properties:
@@ -209,9 +205,6 @@ components:
       required:
         - name
         - account_number
-        - bank_name
-        - bik
-        - correspondent_account
         - initial_balance
         - currency_id
       properties:
@@ -223,12 +216,15 @@ components:
           example: "40702810123456789012"
         bank_name:
           type: string
+          nullable: true
           example: Сбербанк
         bik:
           type: string
+          nullable: true
           example: "044525225"
         correspondent_account:
           type: string
+          nullable: true
           example: "30101810100000000225"
         initial_balance:
           type: integer
@@ -240,7 +236,6 @@ components:
           example: 1
 
     # КОНТРАГЕНТЫ
-
     Counterparty:
       type: object
       properties:
@@ -281,33 +276,32 @@ components:
       type: object
       required:
         - name
-        - inn
-        - bank_name
-        - bik
-        - correspondent_account
-        - current_account
       properties:
         name:
           type: string
           example: ООО Ромашка
         inn:
           type: string
+          nullable: true
           example: "7701234567"
         bank_name:
           type: string
+          nullable: true
           example: Сбербанк
         bik:
           type: string
+          nullable: true
           example: "044525225"
         correspondent_account:
           type: string
+          nullable: true
           example: "30101810100000000225"
         current_account:
           type: string
+          nullable: true
           example: "40702810100000001234"
 
     # СТАТЬИ
-
     Item:
       type: object
       properties:
@@ -343,7 +337,6 @@ components:
           example: expense
 
     # ВАЛЮТЫ
-
     Currency:
       type: object
       properties:
@@ -360,22 +353,6 @@ components:
           type: string
           example: ₽
 
-    CurrencyRate:
-      type: object
-      properties:
-        currency:
-          $ref: "#/components/schemas/Currency"
-        rate_to_rub:
-          type: number
-          example: 85.50
-        rate_to_rub_formatted:
-          type: string
-          example: "85.5000 ₽"
-        rate_date:
-          type: string
-          format: date
-          example: "2026-07-15"
-
     # ПЛАТЕЖИ
 
     Payment:
@@ -384,9 +361,6 @@ components:
         id:
           type: integer
           example: 1
-        name:
-          type: string
-          example: Оплата аренды
         amount:
           type: integer
           description: Сумма в копейках
@@ -440,9 +414,6 @@ components:
         recurring_template_id:
           type: integer
           nullable: true
-        created_by:
-          type: integer
-          example: 1
         account:
           $ref: "#/components/schemas/Account"
         counterparty:
@@ -459,16 +430,12 @@ components:
     PaymentCreate:
       type: object
       required:
-        - name
         - amount
         - planned_date
         - account_id
         - item_id
         - priority
       properties:
-        name:
-          type: string
-          example: Оплата аренды
         amount:
           type: integer
           minimum: 1
@@ -500,13 +467,10 @@ components:
     PaymentUpdate:
       type: object
       properties:
-        name:
-          type: string
-          example: Оплата аренды (обновлено)
         amount:
           type: integer
           minimum: 1
-          example: 160000
+          example: 150000
         planned_date:
           type: string
           format: date
@@ -564,10 +528,6 @@ components:
           type: string
           format: date
           example: "2026-07-20"
-        apply_to_future:
-          type: boolean
-          default: false
-          example: false
 
     PaymentChangeAccount:
       type: object
@@ -577,40 +537,66 @@ components:
         new_account_id:
           type: integer
           example: 2
-        confirm_conversion:
-          type: boolean
-          default: false
-          example: false
 
-    Approval:
+    PaymentActionResponse:
       type: object
       properties:
-        id:
-          type: integer
-          example: 1
-        decision:
+        message:
           type: string
-          enum: [approved, rejected]
-          example: approved
-        decision_text:
-          type: string
-          example: Согласовано
-        comment:
+          example: Заявка согласована
+        payment:
+          $ref: "#/components/schemas/Payment"
+        warning:
           type: string
           nullable: true
-          example: Согласовано
-        user_name:
+          example: Внимание! Перенос создает кассовый разрыв
+
+    ApprovalResponse:
+      type: object
+      properties:
+        payment_id:
+          type: integer
+          example: 1
+        payment_status:
           type: string
-          example: Иван Иванов
-        user_email:
-          type: string
-          example: admin@test.com
-        created_at:
-          type: string
-          format: date-time
-        created_at_formatted:
-          type: string
-          example: 5 минут назад
+          example: approved
+        total_approvals:
+          type: integer
+          example: 1
+        approvals:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                example: 1
+              decision:
+                type: string
+                enum: [approved, rejected]
+                example: approved
+              decision_text:
+                type: string
+                example: Согласовано
+              comment:
+                type: string
+                nullable: true
+                example: Согласовано
+              user_id:
+                type: integer
+                example: 1
+              user_name:
+                type: string
+                example: admin
+              user_email:
+                type: string
+                example: admin@test.com
+              created_at:
+                type: string
+                format: date-time
+              created_at_formatted:
+                type: string
+                example: 1 минуту назад
 
     # ПОСТУПЛЕНИЯ
 
@@ -620,9 +606,6 @@ components:
         id:
           type: integer
           example: 1
-        name:
-          type: string
-          example: Оплата от клиента
         amount:
           type: integer
           description: Сумма в копейках
@@ -641,15 +624,16 @@ components:
         item_id:
           type: integer
           example: 1
+        description:
+          type: string
+          nullable: true
+          example: Оплата по договору №123
         is_recurring:
           type: boolean
           example: false
         recurring_template_id:
           type: integer
           nullable: true
-        created_by:
-          type: integer
-          example: 1
         account:
           $ref: "#/components/schemas/Account"
         counterparty:
@@ -666,15 +650,11 @@ components:
     IncomeCreate:
       type: object
       required:
-        - name
         - amount
         - planned_date
         - account_id
         - item_id
       properties:
-        name:
-          type: string
-          example: Оплата от клиента
         amount:
           type: integer
           minimum: 1
@@ -693,12 +673,42 @@ components:
           type: integer
           nullable: true
           example: 1
+        description:
+          type: string
+          nullable: true
+          example: Оплата по договору №123
         is_recurring:
           type: boolean
           default: false
           example: false
 
     # КАЛЕНДАРЬ
+
+    CalendarResponse:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+              example: "2026-07-01"
+            end:
+              type: string
+              format: date
+              example: "2026-07-31"
+        accounts:
+          type: array
+          items:
+            type: object
+            properties:
+              account:
+                $ref: "#/components/schemas/Account"
+              days:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarDay"
 
     CalendarDay:
       type: object
@@ -755,32 +765,6 @@ components:
                 type: string
                 nullable: true
 
-    CalendarResponse:
-      type: object
-      properties:
-        period:
-          type: object
-          properties:
-            start:
-              type: string
-              format: date
-              example: "2026-07-01"
-            end:
-              type: string
-              format: date
-              example: "2026-07-31"
-        accounts:
-          type: array
-          items:
-            type: object
-            properties:
-              account:
-                $ref: "#/components/schemas/Account"
-              days:
-                type: array
-                items:
-                  $ref: "#/components/schemas/CalendarDay"
-
     TotalBalanceResponse:
       type: object
       properties:
@@ -803,7 +787,6 @@ components:
             RUB: 1000000
             USD: 5000
             EUR: 3000
-            AMD: 100000
         details:
           type: array
           items:
@@ -845,7 +828,7 @@ components:
               date:
                 type: string
                 format: date
-                example: "2026-07-20"
+                example: "2026-07-15"
               balance_end:
                 type: integer
                 example: -50000
@@ -908,38 +891,6 @@ components:
             execution_percent:
               type: number
               example: 93.8
-
-    ReportHistory:
-      type: object
-      properties:
-        id:
-          type: integer
-          example: 1
-        name:
-          type: string
-          example: Балансы на 15.07.2026
-        type:
-          type: string
-          enum: [balances, cash_gaps, plan_fact]
-          example: balances
-        type_text:
-          type: string
-          example: Балансы
-        generator:
-          type: object
-          properties:
-            id:
-              type: integer
-              example: 1
-            name:
-              type: string
-              example: Иван Иванов
-        parameters:
-          type: object
-          example: { "date": "2026-07-15" }
-        created_at:
-          type: string
-          format: date-time
 
     # РЕЕСТРЫ
 
@@ -1005,11 +956,6 @@ components:
         total_amount_formatted:
           type: string
           example: "2 250.00 ₽"
-        warnings:
-          type: array
-          items:
-            type: string
-          example: ["Недостаточно средств для платежа #1"]
 
     # ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ
 
@@ -1025,7 +971,7 @@ components:
           example: payment
         name:
           type: string
-          example: Ежемесячная аренда
+          example: Аренда офиса
         amount:
           type: integer
           example: 150000
@@ -1062,15 +1008,6 @@ components:
           format: date
           nullable: true
           example: "2026-07-01"
-        created_by:
-          type: integer
-          example: 1
-        creator_name:
-          type: string
-          example: Иван Иванов
-        is_active:
-          type: boolean
-          example: true
         created_at:
           type: string
           format: date-time
@@ -1095,7 +1032,7 @@ components:
           example: payment
         name:
           type: string
-          example: Ежемесячная аренда
+          example: Аренда офиса
         amount:
           type: integer
           minimum: 1
@@ -1129,61 +1066,46 @@ components:
           nullable: true
           example: "2026-12-31"
 
-    # АУДИТ
-
-    AuditLog:
+    RecurringTemplateGenerateResponse:
       type: object
       properties:
-        id:
+        message:
+          type: string
+          example: Заявки сгенерированы
+        template_id:
           type: integer
           example: 1
-        user_id:
+        template_name:
+          type: string
+          example: Аренда офиса
+        generated_count:
           type: integer
           example: 1
-        user_name:
+
+    # КУРСЫ ВАЛЮТ
+
+    ExchangeRateResponse:
+      type: object
+      properties:
+        message:
           type: string
-          example: Иван Иванов
-        user_email:
+          example: Курсы валют успешно синхронизированы с биржи!
+        date:
           type: string
-          example: admin@test.com
-        entity_type:
-          type: string
-          example: payment
-        entity_type_text:
-          type: string
-          example: Платёж
-        entity_id:
-          type: integer
-          example: 1
-        action:
-          type: string
-          enum:
-            [create, update, delete, status_change, reschedule, approve, reject]
-          example: update
-        action_text:
-          type: string
-          example: Обновление
-        field_name:
-          type: string
-          nullable: true
-          example: status
-        field_name_text:
-          type: string
-          example: Статус
-        old_value:
-          type: string
-          nullable: true
-          example: draft
-        new_value:
-          type: string
-          nullable: true
-          example: under_approval
-        created_at:
-          type: string
-          format: date-time
-        created_at_formatted:
-          type: string
-          example: 5 минут назад
+          format: date
+          example: "2026-07-15"
+        rates_in_rub:
+          type: object
+          properties:
+            "1 USD":
+              type: string
+              example: "85.50 ₽"
+            "1 EUR":
+              type: string
+              example: "95.00 ₽"
+            "1 AMD":
+              type: string
+              example: "0.22 ₽"
 
     # ИМПОРТ
 
@@ -1205,43 +1127,10 @@ components:
           type: integer
           example: 1
 
-    ImportPreviewResponse:
-      type: object
-      properties:
-        total_rows:
-          type: integer
-          example: 10
-        preview_rows:
-          type: integer
-          example: 10
-        preview:
-          type: array
-          items:
-            type: object
-            properties:
-              row_number:
-                type: integer
-                example: 1
-              data:
-                type: object
-              valid:
-                type: object
-                properties:
-                  is_valid:
-                    type: boolean
-                  errors:
-                    type: array
-                    items:
-                      type: string
-        columns:
-          type: array
-          items:
-            type: string
-          example: ["контрагент", "сумма", "дата"]
-
 # ПУТИ (ENDPOINTS)
+
 paths:
-  # АУТЕНТИФИКАЦИЯ
+  #   АУТЕНТИФИКАЦИЯ
   /login:
     post:
       tags:
@@ -1265,25 +1154,6 @@ paths:
         "429":
           description: Слишком много попыток входа
 
-  /logout:
-    post:
-      tags:
-        - Auth
-      summary: Выход из системы
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Выход выполнен
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Выход выполнен
-
   /me:
     get:
       tags:
@@ -1306,7 +1176,26 @@ paths:
                     items:
                       type: string
 
-  # СЧЕТА
+  /logout:
+    post:
+      tags:
+        - Auth
+      summary: Выход из системы
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Выход выполнен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Выход выполнен
+
+  #   СЧЕТА
   /accounts:
     get:
       tags:
@@ -1344,7 +1233,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Account"
         "422":
-          description: Ошибка валидации
+          description: Ошибка валидации (например, отрицательный баланс)
 
   /accounts/{id}:
     get:
@@ -1404,7 +1293,7 @@ paths:
         "204":
           description: Счет удален
 
-  # КОНТРАГЕНТЫ
+  #   КОНТРАГЕНТЫ
   /counterparties:
     get:
       tags:
@@ -1492,7 +1381,7 @@ paths:
         "204":
           description: Контрагент удален
 
-  # СТАТЬИ
+  #   СТАТЬИ
   /items:
     get:
       tags:
@@ -1526,116 +1415,7 @@ paths:
         "201":
           description: Статья создана
 
-  # ВАЛЮТЫ
-  /currencies:
-    get:
-      tags:
-        - Accounts
-      summary: Получить список всех валют
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Список валют
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Currency"
-
-  /currencies/{id}:
-    get:
-      tags:
-        - Accounts
-      summary: Получить валюту по ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Данные валюты
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Currency"
-
-  /currencies/rates/latest:
-    get:
-      tags:
-        - Accounts
-      summary: Получить актуальные курсы всех валют
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Актуальные курсы
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  date:
-                    type: string
-                    format: date
-                  rates:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/CurrencyRate"
-
-  /currencies/{identifier}/rate:
-    get:
-      tags:
-        - Accounts
-      summary: Получить актуальный курс валюты (по ID или коду)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: identifier
-          in: path
-          required: true
-          schema:
-            type: string
-          example: USD
-      responses:
-        "200":
-          description: Курс валюты
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CurrencyRate"
-        "404":
-          description: Валюта или курс не найдены
-
-  /currencies/{identifier}/history:
-    get:
-      tags:
-        - Accounts
-      summary: Получить историю курсов валюты
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: identifier
-          in: path
-          required: true
-          schema:
-            type: string
-          example: USD
-        - name: days
-          in: query
-          schema:
-            type: integer
-            default: 30
-      responses:
-        "200":
-          description: История курсов
-
-  # ПЛАТЕЖИ
+  #   ПЛАТЕЖИ
   /payments:
     get:
       tags:
@@ -1672,8 +1452,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Payment"
-        "422":
-          description: Ошибка валидации
 
   /payments/{id}:
     get:
@@ -1716,10 +1494,6 @@ paths:
       responses:
         "200":
           description: Платеж обновлен
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Payment"
 
     delete:
       tags:
@@ -1741,7 +1515,7 @@ paths:
     post:
       tags:
         - Payments
-      summary: Согласовать платеж (treasurer/manager/admin)
+      summary: Согласовать платеж (только treasurer/manager/admin)
       security:
         - bearerAuth: []
       parameters:
@@ -1761,21 +1535,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Заявка согласована
-                  payment:
-                    $ref: "#/components/schemas/Payment"
-        "422":
-          description: Заявка должна быть на согласовании
+                $ref: "#/components/schemas/PaymentActionResponse"
 
   /payments/{id}/reject:
     post:
       tags:
         - Payments
-      summary: Отклонить платеж (treasurer/manager/admin)
+      summary: Отклонить платеж (только treasurer/manager/admin)
       security:
         - bearerAuth: []
       parameters:
@@ -1796,13 +1562,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Заявка отклонена
-                  payment:
-                    $ref: "#/components/schemas/Payment"
+                $ref: "#/components/schemas/PaymentActionResponse"
 
   /payments/{id}/approvals:
     get:
@@ -1823,24 +1583,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  payment_id:
-                    type: integer
-                  payment_status:
-                    type: string
-                  total_approvals:
-                    type: integer
-                  approvals:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Approval"
+                $ref: "#/components/schemas/ApprovalResponse"
 
   /payments/{id}/reschedule:
     post:
       tags:
         - Payments
-      summary: Перенести платеж на другую дату (treasurer/admin)
+      summary: Перенести платеж на другую дату (только treasurer/admin)
       security:
         - bearerAuth: []
       parameters:
@@ -1861,20 +1610,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Заявка перенесена
-                  payment:
-                    $ref: "#/components/schemas/Payment"
-                  warning:
-                    type: string
-                    nullable: true
-                  future_payments_count:
-                    type: integer
-                  future_payments_message:
-                    type: string
+                $ref: "#/components/schemas/PaymentActionResponse"
 
   /payments/{id}/change-account:
     post:
@@ -1901,26 +1637,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Заявка перенесена на другой счет
-                  payment:
-                    $ref: "#/components/schemas/Payment"
-                  warning:
-                    type: string
-                    nullable: true
-                  conversion_info:
-                    type: object
-                  requires_confirmation:
-                    type: boolean
+                $ref: "#/components/schemas/PaymentActionResponse"
 
   /payments/{id}/mark-as-paid:
     post:
       tags:
         - Payments
-      summary: Отметить платеж как оплаченный (treasurer/manager/admin)
+      summary: Отметить платеж как оплаченный (только treasurer/manager/admin)
       security:
         - bearerAuth: []
       parameters:
@@ -1974,37 +1697,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportResponse"
 
-  /payments/import/preview:
-    post:
-      tags:
-        - Payments
-      summary: Предварительный просмотр импорта платежей
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                account_id:
-                  type: integer
-              required:
-                - file
-                - account_id
-      responses:
-        "200":
-          description: Предпросмотр
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ImportPreviewResponse"
-
-  # ПОСТУПЛЕНИЯ
+  #   ПОСТУПЛЕНИЯ
   /incomes:
     get:
       tags:
@@ -2083,10 +1776,6 @@ paths:
       responses:
         "200":
           description: Поступление обновлено
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Income"
 
     delete:
       tags:
@@ -2121,6 +1810,7 @@ paths:
                 file:
                   type: string
                   format: binary
+                  description: Excel файл (.xlsx, .xls, .csv)
                 account_id:
                   type: integer
               required:
@@ -2134,37 +1824,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportResponse"
 
-  /incomes/import/preview:
-    post:
-      tags:
-        - Incomes
-      summary: Предварительный просмотр импорта поступлений
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                account_id:
-                  type: integer
-              required:
-                - file
-                - account_id
-      responses:
-        "200":
-          description: Предпросмотр
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ImportPreviewResponse"
-
-  # КАЛЕНДАРЬ
+  #   КАЛЕНДАРЬ
   /calendar:
     get:
       tags:
@@ -2274,7 +1934,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TotalBalanceResponse"
 
-  # ОТЧЁТЫ
+  #   ОТЧЁТЫ
   /reports/balances:
     get:
       tags:
@@ -2392,6 +2052,11 @@ paths:
       responses:
         "200":
           description: Excel файл
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
 
   /reports/export/cash-gaps:
     get:
@@ -2445,59 +2110,12 @@ paths:
         "200":
           description: Excel файл
 
-  /reports/history:
-    get:
-      tags:
-        - Reports
-      summary: Получить историю сохраненных отчетов (treasurer/manager/admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: type
-          in: query
-          schema:
-            type: string
-            enum: [balances, cash_gaps, plan_fact]
-      responses:
-        "200":
-          description: История отчетов
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  current_page:
-                    type: integer
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/ReportHistory"
-                  total:
-                    type: integer
-
-  /reports/download/{id}:
-    get:
-      tags:
-        - Reports
-      summary: Скачать сохраненный отчет (treasurer/manager/admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Excel файл
-
-  # РЕЕСТРЫ
+  #   РЕЕСТРЫ
   /registries:
     get:
       tags:
         - Registries
-      summary: Получить список реестров (treasurer/manager/admin)
+      summary: Получить список реестров
       security:
         - bearerAuth: []
       responses:
@@ -2513,7 +2131,7 @@ paths:
     post:
       tags:
         - Registries
-      summary: Создать реестр (treasurer/manager/admin)
+      summary: Создать реестр (только treasurer/manager/admin)
       security:
         - bearerAuth: []
       requestBody:
@@ -2534,7 +2152,7 @@ paths:
     get:
       tags:
         - Registries
-      summary: Получить реестр по ID (treasurer/manager/admin)
+      summary: Получить реестр по ID
       security:
         - bearerAuth: []
       parameters:
@@ -2554,7 +2172,7 @@ paths:
     put:
       tags:
         - Registries
-      summary: Обновить реестр (treasurer/manager/admin)
+      summary: Обновить реестр
       security:
         - bearerAuth: []
       parameters:
@@ -2575,7 +2193,7 @@ paths:
     delete:
       tags:
         - Registries
-      summary: Удалить реестр (treasurer/manager/admin)
+      summary: Удалить реестр
       security:
         - bearerAuth: []
       parameters:
@@ -2592,7 +2210,7 @@ paths:
     post:
       tags:
         - Registries
-      summary: Заполнить реестр согласованными заявками (treasurer/manager/admin)
+      summary: Заполнить реестр согласованными заявками
       security:
         - bearerAuth: []
       parameters:
@@ -2613,7 +2231,7 @@ paths:
     get:
       tags:
         - Registries
-      summary: Экспорт реестра в Excel (treasurer/manager/admin)
+      summary: Экспорт реестра в Excel
       security:
         - bearerAuth: []
       parameters:
@@ -2626,70 +2244,12 @@ paths:
         "200":
           description: Excel файл
 
-  /registries/{id}/approve:
-    post:
-      tags:
-        - Registries
-      summary: Утвердить реестр (только manager/admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Реестр утвержден
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Реестр утвержден
-                  registry:
-                    $ref: "#/components/schemas/Registry"
-        "403":
-          description: Недостаточно прав
-
-  /registries/{id}/send-to-bank:
-    post:
-      tags:
-        - Registries
-      summary: Отправить реестр в банк (только manager/admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Реестр отправлен в банк
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Реестр отправлен в банк
-                  registry:
-                    $ref: "#/components/schemas/Registry"
-        "403":
-          description: Недостаточно прав
-
-  # ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ
+  #   ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ
   /recurring-templates:
     get:
       tags:
         - RecurringTemplates
-      summary: Получить список всех шаблонов (initiator/treasurer/admin)
+      summary: Получить список всех шаблонов
       security:
         - bearerAuth: []
       responses:
@@ -2710,7 +2270,7 @@ paths:
     post:
       tags:
         - RecurringTemplates
-      summary: Создать шаблон (initiator/treasurer/admin)
+      summary: Создать шаблон (только treasurer/admin)
       security:
         - bearerAuth: []
       requestBody:
@@ -2732,12 +2292,14 @@ paths:
                     example: Шаблон создан
                   template:
                     $ref: "#/components/schemas/RecurringTemplate"
+        "422":
+          description: Ошибка валидации
 
   /recurring-templates/{id}:
     get:
       tags:
         - RecurringTemplates
-      summary: Получить шаблон по ID (initiator/treasurer/admin)
+      summary: Получить шаблон по ID
       security:
         - bearerAuth: []
       parameters:
@@ -2757,7 +2319,7 @@ paths:
     put:
       tags:
         - RecurringTemplates
-      summary: Обновить шаблон (initiator/treasurer/admin)
+      summary: Обновить шаблон (только treasurer/admin)
       security:
         - bearerAuth: []
       parameters:
@@ -2774,11 +2336,21 @@ paths:
       responses:
         "200":
           description: Шаблон обновлен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Шаблон обновлён
+                  template:
+                    $ref: "#/components/schemas/RecurringTemplate"
 
     delete:
       tags:
         - RecurringTemplates
-      summary: Удалить шаблон (initiator/treasurer/admin)
+      summary: Удалить шаблон (только treasurer/admin)
       security:
         - bearerAuth: []
       parameters:
@@ -2790,6 +2362,14 @@ paths:
       responses:
         "200":
           description: Шаблон удален
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Шаблон удалён
         "422":
           description: Нельзя удалить шаблон с созданными заявками
 
@@ -2797,7 +2377,7 @@ paths:
     post:
       tags:
         - RecurringTemplates
-      summary: Ручная генерация заявок по шаблону (initiator/treasurer/admin)
+      summary: Ручная генерация заявок по шаблону
       security:
         - bearerAuth: []
       parameters:
@@ -2812,17 +2392,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Заявки сгенерированы
-                  template_id:
-                    type: integer
-                  template_name:
-                    type: string
-                  generated_count:
-                    type: integer
+                $ref: "#/components/schemas/RecurringTemplateGenerateResponse"
 
   /recurring-templates/{id}/payments:
     get:
@@ -2840,6 +2410,21 @@ paths:
       responses:
         "200":
           description: Список платежей
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  template_id:
+                    type: integer
+                  template_name:
+                    type: string
+                  total:
+                    type: integer
+                  payments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payment"
 
   /recurring-templates/{id}/incomes:
     get:
@@ -2857,23 +2442,54 @@ paths:
       responses:
         "200":
           description: Список поступлений
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  template_id:
+                    type: integer
+                  template_name:
+                    type: string
+                  total:
+                    type: integer
+                  incomes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Income"
 
-  # КУРСЫ ВАЛЮТ
+  #   КУРСЫ ВАЛЮТ
   /rates:
     get:
       tags:
-        - Accounts
+        - Calendar
       summary: Получить историю курсов (только админ)
       security:
         - bearerAuth: []
       responses:
         "200":
           description: Список курсов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    currency_id:
+                      type: integer
+                    rate_to_rub:
+                      type: number
+                    rate_date:
+                      type: string
+                      format: date
 
   /rates/update:
     post:
       tags:
-        - Accounts
+        - Calendar
       summary: Обновить курсы валют (только админ)
       security:
         - bearerAuth: []
@@ -2883,142 +2499,11 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Курсы валют успешно синхронизированы с биржи!
-                  date:
-                    type: string
-                    format: date
-                  rates_in_rub:
-                    type: object
-                    properties:
-                      "1 USD":
-                        type: string
-                        example: "85.50 ₽"
-                      "1 EUR":
-                        type: string
-                        example: "95.00 ₽"
-                      "1 AMD":
-                        type: string
-                        example: "0.22 ₽"
+                $ref: "#/components/schemas/ExchangeRateResponse"
         "500":
           description: Ошибка получения курсов
 
-  # ЖУРНАЛ АУДИТА
-  /audit/logs:
-    get:
-      tags:
-        - Audit
-      summary: Получить список записей аудита (admin/manager)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: entity_type
-          in: query
-          schema:
-            type: string
-        - name: entity_id
-          in: query
-          schema:
-            type: integer
-        - name: action
-          in: query
-          schema:
-            type: string
-            enum:
-              [
-                create,
-                update,
-                delete,
-                status_change,
-                reschedule,
-                approve,
-                reject,
-              ]
-        - name: user_id
-          in: query
-          schema:
-            type: integer
-        - name: date_from
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: date_to
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: per_page
-          in: query
-          schema:
-            type: integer
-            default: 20
-      responses:
-        "200":
-          description: Список записей аудита
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/AuditLog"
-                  pagination:
-                    type: object
-                    properties:
-                      total:
-                        type: integer
-                      per_page:
-                        type: integer
-                      current_page:
-                        type: integer
-                      last_page:
-                        type: integer
-
-  /audit/logs/{id}:
-    get:
-      tags:
-        - Audit
-      summary: Получить запись аудита по ID (admin/manager)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Запись аудита
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuditLog"
-
-  /audit/payment/{paymentId}:
-    get:
-      tags:
-        - Audit
-      summary: Получить историю по платежу (admin/manager)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: paymentId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: История платежа
-
-  # АДМИНИСТРИРОВАНИЕ
+  #   АДМИНИСТРИРОВАНИЕ
   /admin/users:
     get:
       tags:
@@ -3106,16 +2591,6 @@ paths:
       responses:
         "200":
           description: Пользователь обновлен
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Пользователь обновлён
-                  user:
-                    $ref: "#/components/schemas/User"
 
     delete:
       tags:
