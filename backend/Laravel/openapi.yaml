@@ -1,0 +1,3182 @@
+openapi: 3.0.0
+info:
+  title: Платёжный календарь API
+  description: |
+    ## О системе
+    API для управления платежами, поступлениями и платёжным календарём.
+
+    ### Основные возможности
+    - Создание и управление заявками на платежи и поступления
+    - Отслеживание остатков по счетам в режиме реального времени
+    - Выявление и управление кассовыми разрывами
+    - Формирование реестров платежей
+    - Построение отчётов и выгрузка в Excel
+    - Повторяющиеся платежи по расписанию
+
+    ### Аутентификация
+    Все защищённые эндпоинты требуют Bearer токен.
+    Токен передаётся в заголовке: `Authorization: Bearer {token}`
+    Токен получается при логине.
+
+    ### Роли пользователей
+    - **initiator** - создаёт заявки на платежи
+    - **treasurer** - казначей, управляет календарём и реестрами
+    - **manager** - руководитель, утверждает заявки
+    - **admin** - полный доступ, управляет пользователями и справочниками
+
+    ### Форматы данных
+    - Все суммы передаются в **копейках** (целые числа)
+    - Даты в формате `YYYY-MM-DD`
+
+    ### Статусы заявок на платёж
+    - `draft` - Черновик
+    - `under_approval` - На согласовании
+    - `approved` - Согласована
+    - `approved_moved` - Согласована с переносом
+    - `in_registry` - В реестре
+    - `paid` - Оплачена
+    - `rejected` - Отклонена
+
+    ### Приоритеты
+    - `low` - Низкий
+    - `medium` - Средний
+    - `high` - Высокий
+
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api
+    description: Локальный сервер разработки
+
+tags:
+  - name: Auth
+    description: Аутентификация
+  - name: Accounts
+    description: Управление счетами
+  - name: Counterparties
+    description: Управление контрагентами
+  - name: Items
+    description: Управление статьями
+  - name: Payments
+    description: Управление платежами
+  - name: Incomes
+    description: Управление поступлениями
+  - name: Calendar
+    description: Платёжный календарь
+  - name: Reports
+    description: Отчёты
+  - name: Registries
+    description: Реестры платежей
+  - name: RecurringTemplates
+    description: Повторяющиеся платежи
+  - name: Admin
+    description: Администрирование
+  - name: Audit
+    description: Журнал аудита
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Токен доступа, полученный при логине
+
+  schemas:
+    # АУТЕНТИФИКАЦИЯ
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@test.com
+        password:
+          type: string
+          format: password
+          example: password123
+
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Успешный вход
+        user:
+          $ref: "#/components/schemas/User"
+        roles:
+          type: array
+          items:
+            type: string
+          example: ["admin", "treasurer"]
+        token:
+          type: string
+          example: "1|abcdefghijklmnopqrstuvwxyz"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Иван Иванов
+        email:
+          type: string
+          example: admin@test.com
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserCreate:
+      type: object
+      required:
+        - name
+        - email
+        - password
+        - roles
+      properties:
+        name:
+          type: string
+          example: Иван Иванов
+        email:
+          type: string
+          format: email
+          example: ivan@test.com
+        password:
+          type: string
+          format: password
+          example: password123
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [initiator, treasurer, manager, admin]
+          example: ["initiator", "treasurer"]
+
+    # СЧЕТА
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Расчетный счет ООО Ромашка
+        account_number:
+          type: string
+          example: "40702810123456789012"
+        bank_name:
+          type: string
+          nullable: true
+          example: Сбербанк
+        bik:
+          type: string
+          nullable: true
+          example: "044525225"
+        correspondent_account:
+          type: string
+          nullable: true
+          example: "30101810100000000225"
+        initial_balance:
+          type: integer
+          description: Баланс в копейках
+          example: 1000000
+        currency_id:
+          type: integer
+          example: 1
+        currency:
+          $ref: "#/components/schemas/Currency"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AccountCreate:
+      type: object
+      required:
+        - name
+        - account_number
+        - bank_name
+        - bik
+        - correspondent_account
+        - initial_balance
+        - currency_id
+      properties:
+        name:
+          type: string
+          example: Расчетный счет ООО Ромашка
+        account_number:
+          type: string
+          example: "40702810123456789012"
+        bank_name:
+          type: string
+          example: Сбербанк
+        bik:
+          type: string
+          example: "044525225"
+        correspondent_account:
+          type: string
+          example: "30101810100000000225"
+        initial_balance:
+          type: integer
+          minimum: 0
+          description: Баланс в копейках (НЕ МОЖЕТ БЫТЬ ОТРИЦАТЕЛЬНЫМ!)
+          example: 1000000
+        currency_id:
+          type: integer
+          example: 1
+
+    # КОНТРАГЕНТЫ
+
+    Counterparty:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: ООО Ромашка
+        inn:
+          type: string
+          nullable: true
+          example: "7701234567"
+        bank_name:
+          type: string
+          nullable: true
+          example: Сбербанк
+        bik:
+          type: string
+          nullable: true
+          example: "044525225"
+        correspondent_account:
+          type: string
+          nullable: true
+          example: "30101810100000000225"
+        current_account:
+          type: string
+          nullable: true
+          example: "40702810100000001234"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CounterpartyCreate:
+      type: object
+      required:
+        - name
+        - inn
+        - bank_name
+        - bik
+        - correspondent_account
+        - current_account
+      properties:
+        name:
+          type: string
+          example: ООО Ромашка
+        inn:
+          type: string
+          example: "7701234567"
+        bank_name:
+          type: string
+          example: Сбербанк
+        bik:
+          type: string
+          example: "044525225"
+        correspondent_account:
+          type: string
+          example: "30101810100000000225"
+        current_account:
+          type: string
+          example: "40702810100000001234"
+
+    # СТАТЬИ
+
+    Item:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Аренда офиса
+        type:
+          type: string
+          enum: [income, expense]
+          example: expense
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ItemCreate:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          example: Аренда офиса
+        type:
+          type: string
+          enum: [income, expense]
+          example: expense
+
+    # ВАЛЮТЫ
+
+    Currency:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        code:
+          type: string
+          example: RUB
+        name:
+          type: string
+          example: Российский рубль
+        symbol:
+          type: string
+          example: ₽
+
+    CurrencyRate:
+      type: object
+      properties:
+        currency:
+          $ref: "#/components/schemas/Currency"
+        rate_to_rub:
+          type: number
+          example: 85.50
+        rate_to_rub_formatted:
+          type: string
+          example: "85.5000 ₽"
+        rate_date:
+          type: string
+          format: date
+          example: "2026-07-15"
+
+    # ПЛАТЕЖИ
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Оплата аренды
+        amount:
+          type: integer
+          description: Сумма в копейках
+          example: 150000
+        planned_date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        original_planned_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-07-15"
+        account_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        priority:
+          type: string
+          enum: [low, medium, high]
+          example: high
+        status:
+          type: string
+          enum:
+            [
+              draft,
+              under_approval,
+              approved,
+              approved_moved,
+              in_registry,
+              paid,
+              rejected,
+            ]
+          example: draft
+        rescheduled_by:
+          type: integer
+          nullable: true
+        rescheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_recurring:
+          type: boolean
+          example: false
+        recurring_template_id:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          example: 1
+        account:
+          $ref: "#/components/schemas/Account"
+        counterparty:
+          $ref: "#/components/schemas/Counterparty"
+        item:
+          $ref: "#/components/schemas/Item"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PaymentCreate:
+      type: object
+      required:
+        - name
+        - amount
+        - planned_date
+        - account_id
+        - item_id
+        - priority
+      properties:
+        name:
+          type: string
+          example: Оплата аренды
+        amount:
+          type: integer
+          minimum: 1
+          example: 150000
+        planned_date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        account_id:
+          type: integer
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        priority:
+          type: string
+          enum: [low, medium, high]
+          example: high
+        status:
+          type: string
+          enum: [draft, under_approval]
+          default: draft
+          example: draft
+
+    PaymentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Оплата аренды (обновлено)
+        amount:
+          type: integer
+          minimum: 1
+          example: 160000
+        planned_date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        account_id:
+          type: integer
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        priority:
+          type: string
+          enum: [low, medium, high]
+          example: high
+        status:
+          type: string
+          enum:
+            [
+              draft,
+              under_approval,
+              approved,
+              approved_moved,
+              in_registry,
+              paid,
+              rejected,
+            ]
+          example: under_approval
+
+    PaymentApprove:
+      type: object
+      properties:
+        comment:
+          type: string
+          example: Согласовано
+
+    PaymentReject:
+      type: object
+      required:
+        - comment
+      properties:
+        comment:
+          type: string
+          example: Недостаточно средств
+
+    PaymentReschedule:
+      type: object
+      required:
+        - new_date
+      properties:
+        new_date:
+          type: string
+          format: date
+          example: "2026-07-20"
+        apply_to_future:
+          type: boolean
+          default: false
+          example: false
+
+    PaymentChangeAccount:
+      type: object
+      required:
+        - new_account_id
+      properties:
+        new_account_id:
+          type: integer
+          example: 2
+        confirm_conversion:
+          type: boolean
+          default: false
+          example: false
+
+    Approval:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        decision:
+          type: string
+          enum: [approved, rejected]
+          example: approved
+        decision_text:
+          type: string
+          example: Согласовано
+        comment:
+          type: string
+          nullable: true
+          example: Согласовано
+        user_name:
+          type: string
+          example: Иван Иванов
+        user_email:
+          type: string
+          example: admin@test.com
+        created_at:
+          type: string
+          format: date-time
+        created_at_formatted:
+          type: string
+          example: 5 минут назад
+
+    # ПОСТУПЛЕНИЯ
+
+    Income:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Оплата от клиента
+        amount:
+          type: integer
+          description: Сумма в копейках
+          example: 500000
+        planned_date:
+          type: string
+          format: date
+          example: "2026-07-10"
+        account_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        is_recurring:
+          type: boolean
+          example: false
+        recurring_template_id:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          example: 1
+        account:
+          $ref: "#/components/schemas/Account"
+        counterparty:
+          $ref: "#/components/schemas/Counterparty"
+        item:
+          $ref: "#/components/schemas/Item"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    IncomeCreate:
+      type: object
+      required:
+        - name
+        - amount
+        - planned_date
+        - account_id
+        - item_id
+      properties:
+        name:
+          type: string
+          example: Оплата от клиента
+        amount:
+          type: integer
+          minimum: 1
+          example: 500000
+        planned_date:
+          type: string
+          format: date
+          example: "2026-07-10"
+        account_id:
+          type: integer
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        is_recurring:
+          type: boolean
+          default: false
+          example: false
+
+    # КАЛЕНДАРЬ
+
+    CalendarDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-07-01"
+        incomes:
+          type: integer
+          description: Сумма поступлений за день в копейках
+          example: 500000
+        payments:
+          type: integer
+          description: Сумма платежей за день в копейках
+          example: 150000
+        balance_start:
+          type: integer
+          description: Остаток на начало дня в копейках
+          example: 1000000
+        balance_end:
+          type: integer
+          description: Остаток на конец дня в копейках
+          example: 1350000
+        is_cash_gap:
+          type: boolean
+          description: Является ли день кассовым разрывом
+          example: false
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                example: 1
+              type:
+                type: string
+                enum: [income, payment]
+                example: payment
+              amount:
+                type: integer
+                example: 150000
+              description:
+                type: string
+                nullable: true
+              status:
+                type: string
+                nullable: true
+              priority:
+                type: string
+                nullable: true
+              counterparty:
+                type: string
+                nullable: true
+
+    CalendarResponse:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+              example: "2026-07-01"
+            end:
+              type: string
+              format: date
+              example: "2026-07-31"
+        accounts:
+          type: array
+          items:
+            type: object
+            properties:
+              account:
+                $ref: "#/components/schemas/Account"
+              days:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarDay"
+
+    TotalBalanceResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        total_balance_rub:
+          type: integer
+          description: Общий баланс в рублях (все валюты сконвертированы)
+          example: 2500000
+        total_balance_rub_formatted:
+          type: string
+          example: "25 000.00 ₽"
+        balances_by_currency:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            RUB: 1000000
+            USD: 5000
+            EUR: 3000
+            AMD: 100000
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountBalance"
+
+    AccountBalance:
+      type: object
+      properties:
+        account_id:
+          type: integer
+          example: 1
+        account_name:
+          type: string
+          example: Расчетный счет
+        currency:
+          type: string
+          example: RUB
+        balance:
+          type: integer
+          example: 1000000
+        balance_formatted:
+          type: string
+          example: "10 000.00 ₽"
+
+    CashGapsResponse:
+      type: object
+      properties:
+        cash_gaps:
+          type: array
+          items:
+            type: object
+            properties:
+              account_id:
+                type: integer
+                example: 1
+              account_name:
+                type: string
+                example: Расчетный счет
+              date:
+                type: string
+                format: date
+                example: "2026-07-20"
+              balance_end:
+                type: integer
+                example: -50000
+              deficit:
+                type: integer
+                example: 50000
+        total_gaps:
+          type: integer
+          example: 1
+
+    # ОТЧЁТЫ
+
+    PlanFactResponse:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+              example: "2026-07-01"
+            end:
+              type: string
+              format: date
+              example: "2026-07-31"
+        incomes:
+          type: object
+          properties:
+            plan:
+              type: integer
+              example: 1000000
+            plan_formatted:
+              type: string
+              example: "10 000.00 ₽"
+            fact:
+              type: integer
+              example: 850000
+            fact_formatted:
+              type: string
+              example: "8 500.00 ₽"
+            execution_percent:
+              type: number
+              example: 85.0
+        payments:
+          type: object
+          properties:
+            plan:
+              type: integer
+              example: 800000
+            plan_formatted:
+              type: string
+              example: "8 000.00 ₽"
+            fact:
+              type: integer
+              example: 750000
+            fact_formatted:
+              type: string
+              example: "7 500.00 ₽"
+            execution_percent:
+              type: number
+              example: 93.8
+
+    ReportHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Балансы на 15.07.2026
+        type:
+          type: string
+          enum: [balances, cash_gaps, plan_fact]
+          example: balances
+        type_text:
+          type: string
+          example: Балансы
+        generator:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 1
+            name:
+              type: string
+              example: Иван Иванов
+        parameters:
+          type: object
+          example: { "date": "2026-07-15" }
+        created_at:
+          type: string
+          format: date-time
+
+    # РЕЕСТРЫ
+
+    Registry:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        status:
+          type: string
+          enum: [draft, sent_to_bank, paid]
+          example: draft
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RegistryCreate:
+      type: object
+      required:
+        - date
+        - status
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        status:
+          type: string
+          enum: [draft, sent_to_bank, paid]
+          example: draft
+
+    RegistryAttachResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Реестр успешно заполнен заявками!
+        registry_id:
+          type: integer
+          example: 1
+        registry_date:
+          type: string
+          format: date
+          example: "2026-07-15"
+        added_count:
+          type: integer
+          example: 3
+        total_amount:
+          type: integer
+          example: 225000
+        total_amount_formatted:
+          type: string
+          example: "2 250.00 ₽"
+        warnings:
+          type: array
+          items:
+            type: string
+          example: ["Недостаточно средств для платежа #1"]
+
+    # ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ
+
+    RecurringTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        type:
+          type: string
+          enum: [payment, income]
+          example: payment
+        name:
+          type: string
+          example: Ежемесячная аренда
+        amount:
+          type: integer
+          example: 150000
+        account_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        priority:
+          type: string
+          enum: [low, medium, high]
+          nullable: true
+          example: high
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly]
+          example: monthly
+        start_date:
+          type: string
+          format: date
+          example: "2026-07-01"
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-12-31"
+        last_generated_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-07-01"
+        created_by:
+          type: integer
+          example: 1
+        creator_name:
+          type: string
+          example: Иван Иванов
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecurringTemplateCreate:
+      type: object
+      required:
+        - type
+        - name
+        - amount
+        - account_id
+        - item_id
+        - frequency
+        - start_date
+      properties:
+        type:
+          type: string
+          enum: [payment, income]
+          example: payment
+        name:
+          type: string
+          example: Ежемесячная аренда
+        amount:
+          type: integer
+          minimum: 1
+          example: 150000
+        account_id:
+          type: integer
+          example: 1
+        counterparty_id:
+          type: integer
+          nullable: true
+          example: 1
+        item_id:
+          type: integer
+          example: 1
+        priority:
+          type: string
+          enum: [low, medium, high]
+          nullable: true
+          example: high
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly]
+          example: monthly
+        start_date:
+          type: string
+          format: date
+          example: "2026-07-01"
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-12-31"
+
+    # АУДИТ
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        user_name:
+          type: string
+          example: Иван Иванов
+        user_email:
+          type: string
+          example: admin@test.com
+        entity_type:
+          type: string
+          example: payment
+        entity_type_text:
+          type: string
+          example: Платёж
+        entity_id:
+          type: integer
+          example: 1
+        action:
+          type: string
+          enum:
+            [create, update, delete, status_change, reschedule, approve, reject]
+          example: update
+        action_text:
+          type: string
+          example: Обновление
+        field_name:
+          type: string
+          nullable: true
+          example: status
+        field_name_text:
+          type: string
+          example: Статус
+        old_value:
+          type: string
+          nullable: true
+          example: draft
+        new_value:
+          type: string
+          nullable: true
+          example: under_approval
+        created_at:
+          type: string
+          format: date-time
+        created_at_formatted:
+          type: string
+          example: 5 минут назад
+
+    # ИМПОРТ
+
+    ImportResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Импорт платежей завершен
+        imported_count:
+          type: integer
+          example: 10
+        errors:
+          type: array
+          items:
+            type: string
+          example: ["Строка 5: Не указан контрагент"]
+        error_count:
+          type: integer
+          example: 1
+
+    ImportPreviewResponse:
+      type: object
+      properties:
+        total_rows:
+          type: integer
+          example: 10
+        preview_rows:
+          type: integer
+          example: 10
+        preview:
+          type: array
+          items:
+            type: object
+            properties:
+              row_number:
+                type: integer
+                example: 1
+              data:
+                type: object
+              valid:
+                type: object
+                properties:
+                  is_valid:
+                    type: boolean
+                  errors:
+                    type: array
+                    items:
+                      type: string
+        columns:
+          type: array
+          items:
+            type: string
+          example: ["контрагент", "сумма", "дата"]
+
+# ПУТИ (ENDPOINTS)
+paths:
+  # АУТЕНТИФИКАЦИЯ
+  /login:
+    post:
+      tags:
+        - Auth
+      summary: Вход в систему
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Неверные учетные данные
+        "429":
+          description: Слишком много попыток входа
+
+  /logout:
+    post:
+      tags:
+        - Auth
+      summary: Выход из системы
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Выход выполнен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Выход выполнен
+
+  /me:
+    get:
+      tags:
+        - Auth
+      summary: Информация о текущем пользователе
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Данные пользователя
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  roles:
+                    type: array
+                    items:
+                      type: string
+
+  # СЧЕТА
+  /accounts:
+    get:
+      tags:
+        - Accounts
+      summary: Получить список всех счетов
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список счетов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+
+    post:
+      tags:
+        - Accounts
+      summary: Создать счет (только админ)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreate"
+      responses:
+        "201":
+          description: Счет создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "422":
+          description: Ошибка валидации
+
+  /accounts/{id}:
+    get:
+      tags:
+        - Accounts
+      summary: Получить счет по ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные счета
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+    put:
+      tags:
+        - Accounts
+      summary: Обновить счет (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreate"
+      responses:
+        "200":
+          description: Счет обновлен
+
+    delete:
+      tags:
+        - Accounts
+      summary: Удалить счет (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Счет удален
+
+  # КОНТРАГЕНТЫ
+  /counterparties:
+    get:
+      tags:
+        - Counterparties
+      summary: Получить список контрагентов
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список контрагентов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Counterparty"
+
+    post:
+      tags:
+        - Counterparties
+      summary: Создать контрагента (только админ)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CounterpartyCreate"
+      responses:
+        "201":
+          description: Контрагент создан
+
+  /counterparties/{id}:
+    get:
+      tags:
+        - Counterparties
+      summary: Получить контрагента по ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные контрагента
+
+    put:
+      tags:
+        - Counterparties
+      summary: Обновить контрагента (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CounterpartyCreate"
+      responses:
+        "200":
+          description: Контрагент обновлен
+
+    delete:
+      tags:
+        - Counterparties
+      summary: Удалить контрагента (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Контрагент удален
+
+  # СТАТЬИ
+  /items:
+    get:
+      tags:
+        - Items
+      summary: Получить список статей
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список статей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Item"
+
+    post:
+      tags:
+        - Items
+      summary: Создать статью (только админ)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCreate"
+      responses:
+        "201":
+          description: Статья создана
+
+  # ВАЛЮТЫ
+  /currencies:
+    get:
+      tags:
+        - Accounts
+      summary: Получить список всех валют
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список валют
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Currency"
+
+  /currencies/{id}:
+    get:
+      tags:
+        - Accounts
+      summary: Получить валюту по ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные валюты
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Currency"
+
+  /currencies/rates/latest:
+    get:
+      tags:
+        - Accounts
+      summary: Получить актуальные курсы всех валют
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Актуальные курсы
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  rates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CurrencyRate"
+
+  /currencies/{identifier}/rate:
+    get:
+      tags:
+        - Accounts
+      summary: Получить актуальный курс валюты (по ID или коду)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+          example: USD
+      responses:
+        "200":
+          description: Курс валюты
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrencyRate"
+        "404":
+          description: Валюта или курс не найдены
+
+  /currencies/{identifier}/history:
+    get:
+      tags:
+        - Accounts
+      summary: Получить историю курсов валюты
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+          example: USD
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: История курсов
+
+  # ПЛАТЕЖИ
+  /payments:
+    get:
+      tags:
+        - Payments
+      summary: Получить список всех платежей
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список платежей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+
+    post:
+      tags:
+        - Payments
+      summary: Создать заявку на платёж
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentCreate"
+      responses:
+        "201":
+          description: Заявка создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "422":
+          description: Ошибка валидации
+
+  /payments/{id}:
+    get:
+      tags:
+        - Payments
+      summary: Получить платеж по ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные платежа
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+    put:
+      tags:
+        - Payments
+      summary: Обновить платеж
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentUpdate"
+      responses:
+        "200":
+          description: Платеж обновлен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+    delete:
+      tags:
+        - Payments
+      summary: Удалить платеж (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Платеж удален
+
+  /payments/{id}/approve:
+    post:
+      tags:
+        - Payments
+      summary: Согласовать платеж (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentApprove"
+      responses:
+        "200":
+          description: Платеж согласован
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Заявка согласована
+                  payment:
+                    $ref: "#/components/schemas/Payment"
+        "422":
+          description: Заявка должна быть на согласовании
+
+  /payments/{id}/reject:
+    post:
+      tags:
+        - Payments
+      summary: Отклонить платеж (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentReject"
+      responses:
+        "200":
+          description: Платеж отклонен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Заявка отклонена
+                  payment:
+                    $ref: "#/components/schemas/Payment"
+
+  /payments/{id}/approvals:
+    get:
+      tags:
+        - Payments
+      summary: Получить историю согласований по платежу
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: История согласований
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_id:
+                    type: integer
+                  payment_status:
+                    type: string
+                  total_approvals:
+                    type: integer
+                  approvals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Approval"
+
+  /payments/{id}/reschedule:
+    post:
+      tags:
+        - Payments
+      summary: Перенести платеж на другую дату (treasurer/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentReschedule"
+      responses:
+        "200":
+          description: Платеж перенесен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Заявка перенесена
+                  payment:
+                    $ref: "#/components/schemas/Payment"
+                  warning:
+                    type: string
+                    nullable: true
+                  future_payments_count:
+                    type: integer
+                  future_payments_message:
+                    type: string
+
+  /payments/{id}/change-account:
+    post:
+      tags:
+        - Payments
+      summary: Перенести платеж на другой счет (с конвертацией)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentChangeAccount"
+      responses:
+        "200":
+          description: Платеж перенесен на другой счет
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Заявка перенесена на другой счет
+                  payment:
+                    $ref: "#/components/schemas/Payment"
+                  warning:
+                    type: string
+                    nullable: true
+                  conversion_info:
+                    type: object
+                  requires_confirmation:
+                    type: boolean
+
+  /payments/{id}/mark-as-paid:
+    post:
+      tags:
+        - Payments
+      summary: Отметить платеж как оплаченный (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Платеж отмечен как оплаченный
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Заявка отмечена как оплаченная
+                  payment:
+                    $ref: "#/components/schemas/Payment"
+
+  /payments/import:
+    post:
+      tags:
+        - Payments
+      summary: Импорт платежей из Excel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Excel файл (.xlsx, .xls, .csv)
+                account_id:
+                  type: integer
+              required:
+                - file
+                - account_id
+      responses:
+        "200":
+          description: Импорт завершен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResponse"
+
+  /payments/import/preview:
+    post:
+      tags:
+        - Payments
+      summary: Предварительный просмотр импорта платежей
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                account_id:
+                  type: integer
+              required:
+                - file
+                - account_id
+      responses:
+        "200":
+          description: Предпросмотр
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPreviewResponse"
+
+  # ПОСТУПЛЕНИЯ
+  /incomes:
+    get:
+      tags:
+        - Incomes
+      summary: Получить список поступлений
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список поступлений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Income"
+
+    post:
+      tags:
+        - Incomes
+      summary: Создать поступление
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncomeCreate"
+      responses:
+        "201":
+          description: Поступление создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Income"
+
+  /incomes/{id}:
+    get:
+      tags:
+        - Incomes
+      summary: Получить поступление по ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные поступления
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Income"
+
+    put:
+      tags:
+        - Incomes
+      summary: Обновить поступление
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncomeCreate"
+      responses:
+        "200":
+          description: Поступление обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Income"
+
+    delete:
+      tags:
+        - Incomes
+      summary: Удалить поступление
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Поступление удалено
+
+  /incomes/import:
+    post:
+      tags:
+        - Incomes
+      summary: Импорт поступлений из Excel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                account_id:
+                  type: integer
+              required:
+                - file
+                - account_id
+      responses:
+        "200":
+          description: Импорт завершен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResponse"
+
+  /incomes/import/preview:
+    post:
+      tags:
+        - Incomes
+      summary: Предварительный просмотр импорта поступлений
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                account_id:
+                  type: integer
+              required:
+                - file
+                - account_id
+      responses:
+        "200":
+          description: Предпросмотр
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPreviewResponse"
+
+  # КАЛЕНДАРЬ
+  /calendar:
+    get:
+      tags:
+        - Calendar
+      summary: Получить платёжный календарь
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-31"
+        - name: account_id
+          in: query
+          schema:
+            type: integer
+        - name: item_id
+          in: query
+          schema:
+            type: integer
+        - name: counterparty_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              [
+                draft,
+                under_approval,
+                approved,
+                approved_moved,
+                in_registry,
+                paid,
+                rejected,
+              ]
+      responses:
+        "200":
+          description: Данные календаря
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarResponse"
+
+  /calendar/cash-gaps:
+    get:
+      tags:
+        - Calendar
+      summary: Получить кассовые разрывы
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-31"
+      responses:
+        "200":
+          description: Список кассовых разрывов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashGapsResponse"
+
+  /calendar/total-balance:
+    get:
+      tags:
+        - Calendar
+      summary: Получить общий баланс (с разделением по валютам)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-15"
+      responses:
+        "200":
+          description: Общий баланс
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotalBalanceResponse"
+
+  # ОТЧЁТЫ
+  /reports/balances:
+    get:
+      tags:
+        - Reports
+      summary: Отчёт по остаткам на дату
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-15"
+      responses:
+        "200":
+          description: Отчёт по остаткам
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  total_balance_rub:
+                    type: integer
+                  total_balance_rub_formatted:
+                    type: string
+                  accounts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AccountBalance"
+
+  /reports/cash-gaps:
+    get:
+      tags:
+        - Reports
+      summary: Отчёт по кассовым разрывам
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-31"
+      responses:
+        "200":
+          description: Отчёт по кассовым разрывам
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashGapsResponse"
+
+  /reports/plan-fact:
+    get:
+      tags:
+        - Reports
+      summary: Отчёт План-Факт
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-31"
+        - name: account_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Отчёт План-Факт
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanFactResponse"
+
+  /reports/export/balances:
+    get:
+      tags:
+        - Reports
+      summary: Экспорт балансов в Excel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-15"
+      responses:
+        "200":
+          description: Excel файл
+
+  /reports/export/cash-gaps:
+    get:
+      tags:
+        - Reports
+      summary: Экспорт кассовых разрывов в Excel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-31"
+      responses:
+        "200":
+          description: Excel файл
+
+  /reports/export/plan-fact:
+    get:
+      tags:
+        - Reports
+      summary: Экспорт План-Факт в Excel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-07-31"
+      responses:
+        "200":
+          description: Excel файл
+
+  /reports/history:
+    get:
+      tags:
+        - Reports
+      summary: Получить историю сохраненных отчетов (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [balances, cash_gaps, plan_fact]
+      responses:
+        "200":
+          description: История отчетов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_page:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReportHistory"
+                  total:
+                    type: integer
+
+  /reports/download/{id}:
+    get:
+      tags:
+        - Reports
+      summary: Скачать сохраненный отчет (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Excel файл
+
+  # РЕЕСТРЫ
+  /registries:
+    get:
+      tags:
+        - Registries
+      summary: Получить список реестров (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список реестров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Registry"
+
+    post:
+      tags:
+        - Registries
+      summary: Создать реестр (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistryCreate"
+      responses:
+        "201":
+          description: Реестр создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registry"
+
+  /registries/{id}:
+    get:
+      tags:
+        - Registries
+      summary: Получить реестр по ID (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные реестра
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registry"
+
+    put:
+      tags:
+        - Registries
+      summary: Обновить реестр (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistryCreate"
+      responses:
+        "200":
+          description: Реестр обновлен
+
+    delete:
+      tags:
+        - Registries
+      summary: Удалить реестр (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Реестр удален
+
+  /registries/{id}/attach:
+    post:
+      tags:
+        - Registries
+      summary: Заполнить реестр согласованными заявками (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Реестр заполнен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistryAttachResponse"
+
+  /registries/{id}/export:
+    get:
+      tags:
+        - Registries
+      summary: Экспорт реестра в Excel (treasurer/manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Excel файл
+
+  /registries/{id}/approve:
+    post:
+      tags:
+        - Registries
+      summary: Утвердить реестр (только manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Реестр утвержден
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Реестр утвержден
+                  registry:
+                    $ref: "#/components/schemas/Registry"
+        "403":
+          description: Недостаточно прав
+
+  /registries/{id}/send-to-bank:
+    post:
+      tags:
+        - Registries
+      summary: Отправить реестр в банк (только manager/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Реестр отправлен в банк
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Реестр отправлен в банк
+                  registry:
+                    $ref: "#/components/schemas/Registry"
+        "403":
+          description: Недостаточно прав
+
+  # ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ
+  /recurring-templates:
+    get:
+      tags:
+        - RecurringTemplates
+      summary: Получить список всех шаблонов (initiator/treasurer/admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список шаблонов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  templates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RecurringTemplate"
+
+    post:
+      tags:
+        - RecurringTemplates
+      summary: Создать шаблон (initiator/treasurer/admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecurringTemplateCreate"
+      responses:
+        "201":
+          description: Шаблон создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Шаблон создан
+                  template:
+                    $ref: "#/components/schemas/RecurringTemplate"
+
+  /recurring-templates/{id}:
+    get:
+      tags:
+        - RecurringTemplates
+      summary: Получить шаблон по ID (initiator/treasurer/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные шаблона
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringTemplate"
+
+    put:
+      tags:
+        - RecurringTemplates
+      summary: Обновить шаблон (initiator/treasurer/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecurringTemplateCreate"
+      responses:
+        "200":
+          description: Шаблон обновлен
+
+    delete:
+      tags:
+        - RecurringTemplates
+      summary: Удалить шаблон (initiator/treasurer/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Шаблон удален
+        "422":
+          description: Нельзя удалить шаблон с созданными заявками
+
+  /recurring-templates/{id}/generate:
+    post:
+      tags:
+        - RecurringTemplates
+      summary: Ручная генерация заявок по шаблону (initiator/treasurer/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Заявки сгенерированы
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Заявки сгенерированы
+                  template_id:
+                    type: integer
+                  template_name:
+                    type: string
+                  generated_count:
+                    type: integer
+
+  /recurring-templates/{id}/payments:
+    get:
+      tags:
+        - RecurringTemplates
+      summary: Получить все сгенерированные платежи по шаблону
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Список платежей
+
+  /recurring-templates/{id}/incomes:
+    get:
+      tags:
+        - RecurringTemplates
+      summary: Получить все сгенерированные поступления по шаблону
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Список поступлений
+
+  # КУРСЫ ВАЛЮТ
+  /rates:
+    get:
+      tags:
+        - Accounts
+      summary: Получить историю курсов (только админ)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список курсов
+
+  /rates/update:
+    post:
+      tags:
+        - Accounts
+      summary: Обновить курсы валют (только админ)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Курсы обновлены
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Курсы валют успешно синхронизированы с биржи!
+                  date:
+                    type: string
+                    format: date
+                  rates_in_rub:
+                    type: object
+                    properties:
+                      "1 USD":
+                        type: string
+                        example: "85.50 ₽"
+                      "1 EUR":
+                        type: string
+                        example: "95.00 ₽"
+                      "1 AMD":
+                        type: string
+                        example: "0.22 ₽"
+        "500":
+          description: Ошибка получения курсов
+
+  # ЖУРНАЛ АУДИТА
+  /audit/logs:
+    get:
+      tags:
+        - Audit
+      summary: Получить список записей аудита (admin/manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: entity_id
+          in: query
+          schema:
+            type: integer
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum:
+              [
+                create,
+                update,
+                delete,
+                status_change,
+                reschedule,
+                approve,
+                reject,
+              ]
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Список записей аудита
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLog"
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      per_page:
+                        type: integer
+                      current_page:
+                        type: integer
+                      last_page:
+                        type: integer
+
+  /audit/logs/{id}:
+    get:
+      tags:
+        - Audit
+      summary: Получить запись аудита по ID (admin/manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Запись аудита
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLog"
+
+  /audit/payment/{paymentId}:
+    get:
+      tags:
+        - Audit
+      summary: Получить историю по платежу (admin/manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: История платежа
+
+  # АДМИНИСТРИРОВАНИЕ
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Получить список всех пользователей (только админ)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+
+    post:
+      tags:
+        - Admin
+      summary: Создать пользователя (только админ)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Пользователь создан
+                  user:
+                    $ref: "#/components/schemas/User"
+
+  /admin/users/{id}:
+    get:
+      tags:
+        - Admin
+      summary: Получить пользователя по ID (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Данные пользователя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+    put:
+      tags:
+        - Admin
+      summary: Обновить пользователя (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "200":
+          description: Пользователь обновлен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Пользователь обновлён
+                  user:
+                    $ref: "#/components/schemas/User"
+
+    delete:
+      tags:
+        - Admin
+      summary: Удалить пользователя (нельзя удалить себя)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Пользователь удален
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Пользователь удалён
+        "422":
+          description: Нельзя удалить самого себя
+
+  /admin/users/{id}/reset-password:
+    post:
+      tags:
+        - Admin
+      summary: Сбросить пароль пользователя (только админ)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  format: password
+                  example: newpassword123
+      responses:
+        "200":
+          description: Пароль сброшен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Пароль успешно сброшен
