@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: finance_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123455
+      POSTGRES_DB: Payment_calendar_database
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./backend/DB:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend/Laravel
+      dockerfile: Dockerfile
+    container_name: finance_backend
+    restart: always
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8000
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=Payment_calendar_database
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=123455
+    volumes:
+      - ./backend/Laravel:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx_backend:
+    image: nginx:alpine
+    container_name: finance_nginx_backend
+    restart: always
+    ports:
+      - "8000:80"
+    volumes:
+      - ./backend/Laravel:/var/www/html
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d   # монтируем папку, а не файл
+    depends_on:
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend/frontend-calendar/app
+      dockerfile: Dockerfile
+    container_name: finance_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - nginx_backend
+
+volumes:
+  db_data:
