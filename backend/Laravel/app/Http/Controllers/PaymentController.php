@@ -37,7 +37,7 @@ class PaymentController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $query = Payment::with(['account', 'counterparty', 'item']);
+        $query = Payment::with(['account', 'counterparty', 'item', 'creator']);
 
         if (!$user->hasAnyRole(['admin', 'treasurer', 'manager'])) {
             $query->where('created_by', $user->id);
@@ -80,7 +80,7 @@ class PaymentController extends Controller
     public function show(int $id)
     {
         return response()->json(
-            Payment::with(['account', 'counterparty', 'item'])->findOrFail($id),
+            Payment::with(['account', 'counterparty', 'item', 'creator'])->findOrFail($id),
             200
         );
     }
