@@ -157,7 +157,7 @@ Route::middleware('auth:sanctum')->group(function () {
     //  ПОВТОРЯЮЩИЕСЯ ПЛАТЕЖИ 
 
     /** Управление шаблонами (инициатор, казначей, админ) */
-    Route::middleware(['role:initiator,treasurer,admin'])->group(function () {
+    Route::middleware(['role:initiator,treasurer,admin,manager'])->group(function () {
         Route::apiResource('recurring-templates', RecurringTemplateController::class);
         Route::post('recurring-templates/{id}/generate', [RecurringTemplateController::class, 'generate']);
         Route::get('recurring-templates/{id}/payments', [RecurringTemplateController::class, 'getGeneratedPayments']);
