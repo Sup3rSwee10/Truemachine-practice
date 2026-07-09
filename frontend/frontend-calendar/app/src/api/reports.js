@@ -1,6 +1,12 @@
 import { apiClient } from './client';
 import { downloadFile } from '../utils/download';
 
+export async function fetchReportsHistory() {
+  const { data } = await apiClient.get('/reports/history');
+  if (Array.isArray(data)) return data;
+  return data.items || data.data || data.reports || [];
+}
+
 export async function fetchBalancesReport(date) {
   const { data } = await apiClient.get('/reports/balances', { params: { date } });
   return data;

@@ -9,21 +9,25 @@ import {
 } from '../../api/payments';
 import { useAuth } from '../../context/AuthContext';
 import { entities } from '../../config/entities';
+import PaymentHistoryModal from '../../components/PaymentHistoryModal';
 
-// Правила п.1.5, 3.4-3.6: отправка/возврат в черновик — Инициатор;
+// Правила п.1.5, 3.4-3.6: отправка/возврат в черновик — Инициатор (автор заявки);
 // согласование — Казначей/Руководитель; отметка оплаты — Казначей/Руководитель.
-// ВАЖНО: API не возвращает created_by у заявки, поэтому ограничить действия
-// именно автором заявки нельзя — проверяем только по роли.
+// created_by теперь есть в ответе API — можно проверять именно авторство,
+// а не только роль.
 export default function RequestRowActions({ payment, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [showMoveAccount, setShowMoveAccount] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [targetAccountId, setTargetAccountId] = useState('');
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
-  const canInitiate = hasRole('initiator') || hasRole('admin');
+  const isOwner = payment.created_by !== undefined && user && payment.created_by === user.id;
+  const canInitiate = hasRole('admin') || (hasRole('initiator') && isOwner);
   const canApprove = hasRole('treasurer') || hasRole('manager') || hasRole('admin');
-  const canMoveAccount = hasRole('treasurer') || hasRole('admin'); // выполняет казначей (Правила 5.6)
+  const canMoveAccount = hasRole('treasurer') || hasRole('admin');
+  const canViewHistory = hasRole('admin') || hasRole('manager');
 
   useEffect(() => {
     if (showMoveAccount && accounts.length === 0) {
@@ -144,6 +148,13 @@ export default function RequestRowActions({ payment, onChanged }) {
           )}
         </div>
       )}
+
+      {canViewHistory && (
+        <button className="btn btn--small" onClick={() => setShowHistory(true)}>
+          История
+        </button>
+      )}
+      {showHistory && <PaymentHistoryModal paymentId={id} onClose={() => setShowHistory(false)} />}
     </>
   );
 }

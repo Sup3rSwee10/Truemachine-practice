@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   fetchBalancesReport,
   fetchCashGapsReport,
@@ -6,6 +6,7 @@ import {
   downloadBalancesReport,
   downloadCashGapsReport,
   downloadPlanFactReport,
+  fetchReportsHistory,
 } from '../api/reports';
 import { formatMoney } from '../utils/money';
 
@@ -13,6 +14,7 @@ const tabs = [
   { key: 'balances', label: 'Остатки на дату' },
   { key: 'cash-gaps', label: 'Кассовые разрывы' },
   { key: 'plan-fact', label: 'План-Факт' },
+  { key: 'history', label: 'История отчётов' },
 ];
 
 export default function ReportsPage() {
@@ -38,6 +40,7 @@ export default function ReportsPage() {
       {tab === 'balances' && <BalancesReport />}
       {tab === 'cash-gaps' && <CashGapsReport />}
       {tab === 'plan-fact' && <PlanFactReport />}
+      {tab === 'history' && <ReportsHistory />}
     </div>
   );
 }
@@ -212,6 +215,66 @@ function PlanFactReport() {
               <td style={{ textAlign: 'right' }}>{data.payments.fact_formatted}</td>
               <td style={{ textAlign: 'right' }}>{data.payments.execution_percent}%</td>
             </tr>
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function ReportsHistory() {
+  const [reports, setReports] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchReportsHistory()
+      .then(setReports)
+      .catch((err) => setError(err.response?.data?.message || err.message));
+  }, []);
+
+  const typeLabels = {
+    balances: 'Остатки по счетам',
+    cash_gaps: 'Кассовые разрывы',
+    plan_fact: 'План-факт',
+  };
+
+  return (
+    <div className="report-block">
+      {error && <div className="data-table__state data-table__state--error">{error}</div>}
+      {!error && !reports && <div className="data-table__state">Загрузка…</div>}
+      {!error && reports && reports.length === 0 && (
+        <div className="data-table__state">Сохранённых отчётов пока нет</div>
+      )}
+      {!error && reports && reports.length > 0 && (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Тип</th>
+              <th>Период</th>
+              <th>Дата создания</th>
+              <th>Файл</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reports.map((r) => (
+              <tr key={r.id}>
+                <td>{typeLabels[r.type] || r.type}</td>
+                <td>
+                  {r.period_from || r.date || '—'}
+                  {r.period_to ? ` — ${r.period_to}` : ''}
+                </td>
+                <td>{r.created_at ? new Date(r.created_at).toLocaleString('ru-RU') : '—'}</td>
+                <td>
+                  {r.file_url ? (
+                    <a href={r.file_url} target="_blank" rel="noreferrer">Скачать</a>
+                  ) : (
+                    <span title="Бекендер пока не прислал эндпоинт скачивания конкретного сохранённого отчёта (например GET /reports/history/{id}/download)">
+                      нет ссылки
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

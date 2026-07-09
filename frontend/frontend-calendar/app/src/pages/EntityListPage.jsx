@@ -11,7 +11,9 @@ import { useAuth } from '../context/AuthContext';
 export default function EntityListPage({ entityKey }) {
   const entity = entities[entityKey];
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
+
+  const isAllowedToEdit = !entity?.adminOnly || hasRole('admin');
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +58,10 @@ export default function EntityListPage({ entityKey }) {
   }
 
   const needsActionsColumn =
-    entity.canEdit || entity.canDelete || entityKey === 'requests' || entityKey === 'registries' || entityKey === 'templates';
+    (isAllowedToEdit && (entity.canEdit || entity.canDelete)) ||
+    entityKey === 'requests' ||
+    entityKey === 'registries' ||
+    entityKey === 'templates';
 
   function renderActions(row) {
     return (
@@ -64,12 +69,12 @@ export default function EntityListPage({ entityKey }) {
         {entityKey === 'requests' && <RequestRowActions payment={row} onChanged={load} />}
         {entityKey === 'registries' && <RegistryRowActions registry={row} onChanged={load} />}
         {entityKey === 'templates' && <TemplateRowActions template={row} onChanged={load} />}
-        {entity.canEdit && (
+        {entity.canEdit && isAllowedToEdit && (
           <button className="btn btn--small" onClick={() => navigate(`/${entity.routePath}/${row.id}`)}>
             Редактировать
           </button>
         )}
-        {entity.canDelete && (
+        {entity.canDelete && isAllowedToEdit && (
           <button className="btn btn--small btn--danger" onClick={() => handleDelete(row.id)}>
             Удалить
           </button>
@@ -88,9 +93,11 @@ export default function EntityListPage({ entityKey }) {
               Импорт из файла
             </button>
           )}
-          <Link to={`/${entity.routePath}/new`} className="btn btn--primary">
-            + Добавить
-          </Link>
+          {isAllowedToEdit && (
+            <Link to={`/${entity.routePath}/new`} className="btn btn--primary">
+              + Добавить
+            </Link>
+          )}
         </div>
       </div>
 

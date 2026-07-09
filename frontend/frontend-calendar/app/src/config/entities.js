@@ -44,6 +44,7 @@ export const entities = {
     moneyFields: ['amount'],
     columns: [
       { key: 'id', label: '№' },
+      { key: 'name', label: 'Название' },
       { key: 'planned_date', label: 'Дата списания' },
       { key: 'counterpartyName', label: 'Контрагент' },
       { key: 'itemName', label: 'Статья' },
@@ -61,6 +62,7 @@ export const entities = {
       statusLabel: paymentStatusLabel(row.status),
     }),
     fields: [
+      { name: 'name', label: 'Название', type: 'text', required: true },
       { name: 'planned_date', label: 'Дата списания', type: 'date', required: true },
       { name: 'account_id', label: 'Счёт', type: 'select', optionsFrom: 'accounts', required: true },
       { name: 'item_id', label: 'Статья', type: 'select', optionsFrom: 'articles', optionsFilter: (item) => item.type === 'expense', required: true },
@@ -92,6 +94,7 @@ export const entities = {
     moneyFields: ['amount'],
     columns: [
       { key: 'id', label: '№' },
+      { key: 'name', label: 'Название' },
       { key: 'planned_date', label: 'Дата поступления' },
       { key: 'counterpartyName', label: 'Контрагент' },
       { key: 'itemName', label: 'Статья' },
@@ -106,6 +109,7 @@ export const entities = {
       amountFormatted: formatMoney(row.amount),
     }),
     fields: [
+      { name: 'name', label: 'Название', type: 'text', required: true },
       { name: 'planned_date', label: 'Дата поступления', type: 'date', required: true },
       { name: 'account_id', label: 'Счёт', type: 'select', optionsFrom: 'accounts', required: true },
       { name: 'item_id', label: 'Статья', type: 'select', optionsFrom: 'articles', optionsFilter: (item) => item.type === 'income', required: true },
@@ -185,12 +189,14 @@ export const entities = {
     canDelete: true,
     columns: [
       { key: 'id', label: '№' },
+      { key: 'name', label: 'Название' },
       { key: 'date', label: 'Дата' },
       { key: 'status', label: 'Статус' },
       { key: 'paymentsCount', label: 'Заявок', align: 'right' },
     ],
     mapRow: (row) => ({ ...row, paymentsCount: row.payments?.length ?? 0 }),
     fields: [
+      { name: 'name', label: 'Название', type: 'text', required: true },
       { name: 'date', label: 'Дата', type: 'date', required: true },
       {
         name: 'status',
@@ -311,8 +317,9 @@ export const entities = {
     routePath: 'admin/articles',
     basePath: 'items',
     api: createResourceApi('items'),
-    canEdit: false,
-    canDelete: false,
+    canEdit: true,
+    canDelete: true,
+    adminOnly: true, // POST/PUT/DELETE /items — только админ, по данным бекендера
     columns: [
       { key: 'name', label: 'Название' },
       { key: 'typeLabel', label: 'Тип' },
